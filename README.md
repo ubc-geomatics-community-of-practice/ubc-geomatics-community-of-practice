@@ -1,8 +1,1 @@
-Demo: [http://webjeda.com/cards](http://webjeda.com/cards)
-
-## Installation
-* Fork the repository
-* Go to settings and set Github Pages source as master.
-* Your new site should be ready.
-
-For more themes visit - [https://jekyll-themes.com](https://jekyll-themes.com)
+A simple repository to organize the open educational resources using the webjeda cards jekyll theme and redirect users to the correct GitHub Pages site. If you are looking to inspect the source code for a specifical open educational resource, please consult the GitHub repository for that resource.

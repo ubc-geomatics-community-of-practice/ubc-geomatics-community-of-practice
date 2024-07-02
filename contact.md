@@ -4,6 +4,4 @@ title: Contact
 permalink: /contact/
 ---
 
-Insert your contact details or a contact form here.
-
-Read [How to create a form in Jekyll site](http://blog.webjeda.com/jekyll-contact-form/){: target="\_blank"} to implement using formspree.
+For questions related to the open geomatics community or practice, please contact Prof. Paul D. Pickell (paul.pickell@ubc.ca). If you have a question about a specific resource, you should contact the author of the resource.
