@@ -1,0 +1,182 @@
+---
+layout: default
+title: Browse Assignments
+permalink: /browse/
+---
+
+<section class="container">
+  <h1>Browse Open Assignments</h1>
+
+  <div id="filters" class="filters">
+    <input id="q" type="search" placeholder="Search by title, summary, keywords…" aria-label="Search" />
+    <details>
+      <summary>Filter by Theme</summary>
+      <div id="facet-topics" class="facet"></div>
+    </details>
+    <details>
+      <summary>Filter by Tech</summary>
+      <div id="facet-tech" class="facet"></div>
+    </details>
+    <select id="difficulty">
+      <option value="">Any difficulty</option>
+      <option>beginner</option>
+      <option>intermediate</option>
+      <option>advanced</option>
+    </select>
+    <button id="clear">Clear</button>
+  </div>
+
+  <div id="count" class="muted"></div>
+  <div id="cards" class="cards"></div>
+</section>
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+<script>
+(async function () {
+  const res = await fetch("{{ '/assets/assignments.json' | relative_url }}");
+  const data = await res.json();
+  const items = data.items || [];
+
+  // Build facets
+  const topicsAll = new Map();
+  const techAll = new Map();
+  for (const it of items) {
+    (it.topics || []).forEach(t => topicsAll.set(t, 1 + (topicsAll.get(t) || 0)));
+    (it.tech || []).forEach(t => techAll.set(t, 1 + (techAll.get(t) || 0)));
+  }
+
+  const facetTopicsEl = document.getElementById('facet-topics');
+  const facetTechEl = document.getElementById('facet-tech');
+  function addFacet(container, entries, name) {
+    container.innerHTML = '';
+    [...entries.keys()].sort((a, b) => a.localeCompare(b)).forEach(val => {
+      const id = `${name}-${val.replace(/\s+/g,'-').toLowerCase()}`;
+      const wrap = document.createElement('label');
+      wrap.innerHTML = `<input type="checkbox" value="${val}" id="${id}"> ${val}`;
+      container.appendChild(wrap);
+    });
+  }
+  addFacet(facetTopicsEl, topicsAll, 'topics');
+  addFacet(facetTechEl, techAll, 'tech');
+
+  // Fuse for fuzzy text
+  const fuse = new Fuse(items, {
+    keys: [
+      { name: 'title', weight: 0.5 },
+      { name: 'summary', weight: 0.3 },
+      { name: 'keywords', weight: 0.2 }
+    ],
+    threshold: 0.35,
+    ignoreLocation: true,
+    includeScore: false
+  });
+
+  const els = {
+    q: document.getElementById('q'),
+    diff: document.getElementById('difficulty'),
+    cards: document.getElementById('cards'),
+    count: document.getElementById('count'),
+    clear: document.getElementById('clear'),
+  };
+
+  // URL state <-> controls
+  function fromURL() {
+    const p = new URLSearchParams(location.search);
+    els.q.value = p.get('q') || '';
+    els.diff.value = p.get('difficulty') || '';
+    const selTopics = (p.get('topics') || '').split(',').filter(Boolean);
+    const selTech = (p.get('tech') || '').split(',').filter(Boolean);
+    [...facetTopicsEl.querySelectorAll('input')].forEach(chk => chk.checked = selTopics.includes(chk.value));
+    [...facetTechEl.querySelectorAll('input')].forEach(chk => chk.checked = selTech.includes(chk.value));
+  }
+  function toURL() {
+    const p = new URLSearchParams();
+    if (els.q.value) p.set('q', els.q.value);
+    if (els.diff.value) p.set('difficulty', els.diff.value);
+    const topics = [...facetTopicsEl.querySelectorAll('input:checked')].map(c => c.value);
+    const tech = [...facetTechEl.querySelectorAll('input:checked')].map(c => c.value);
+    if (topics.length) p.set('topics', topics.join(','));
+    if (tech.length) p.set('tech', tech.join(','));
+    history.replaceState(null, '', '?' + p.toString());
+  }
+
+  // Filtering
+  function applyFilters() {
+    const q = els.q.value.trim();
+    const diff = els.diff.value;
+    const topics = [...facetTopicsEl.querySelectorAll('input:checked')].map(c => c.value);
+    const tech = [...facetTechEl.querySelectorAll('input:checked')].map(c => c.value);
+
+    let base = q ? fuse.search(q).map(r => r.item) : items.slice();
+
+    if (diff) base = base.filter(it => (it.difficulty || '').toLowerCase() === diff);
+    if (topics.length) base = base.filter(it => (it.topics || []).some(t => topics.includes(t)));
+    if (tech.length) base = base.filter(it => (it.tech || []).some(t => tech.includes(t)));
+
+    render(base);
+    toURL();
+  }
+
+  function card(it) {
+    const title = it.title || it.id;
+    const site = it.site_url || it.repo_url;
+    const course = it.course_code ? `<span class="pill">${it.course_code}</span>` : '';
+    const topics = (it.topics || []).map(t => `<span class="pill">${t}</span>`).join(' ');
+    const tech = (it.tech || []).map(t => `<span class="pill">${t}</span>`).join(' ');
+    const summary = it.summary || '';
+    const license = it.license ? `<span class="pill muted">${it.license}</span>` : '';
+    return `
+      <article class="card">
+        <h3><a href="${site}" target="_blank" rel="noopener">${title}</a></h3>
+        <p class="muted">${summary}</p>
+        <div class="meta">${course} ${license}</div>
+        <div class="tags">
+          ${topics} ${tech}
+        </div>
+        <div class="links">
+          <a href="${site}" target="_blank" rel="noopener">Open site</a>
+          ${it.repo_url ? ` · <a href="${it.repo_url}" target="_blank" rel="noopener">Repo</a>` : ''}
+        </div>
+      </article>
+    `;
+  }
+
+  function render(list) {
+    els.count.textContent = `${list.length} assignment${list.length===1?'':'s'} found`;
+    els.cards.innerHTML = list.map(card).join('');
+  }
+
+  // Wire events
+  fromURL();
+  applyFilters();
+  els.q.addEventListener('input', applyFilters);
+  els.diff.addEventListener('change', applyFilters);
+  facetTopicsEl.addEventListener('change', applyFilters);
+  facetTechEl.addEventListener('change', applyFilters);
+  els.clear.addEventListener('click', () => {
+    els.q.value = '';
+    els.diff.value = '';
+    [...document.querySelectorAll('#filters input[type=checkbox]')].forEach(c => c.checked = false);
+    applyFilters();
+  });
+})();
+</script>
+
+<style>
+.container { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+.filters { display: grid; gap: .5rem; grid-template-columns: 1fr; margin-bottom: .5rem; }
+.filters details { background: #fafafa; padding: .5rem; border-radius: .5rem; }
+.facet label { display: inline-block; margin-right: .75rem; margin-bottom: .5rem; }
+.pill { display:inline-block; padding:.1rem .5rem; border-radius:999px; background:#f0f0f0; margin:.1rem .25rem 0 0; font-size:.8rem }
+.pill.muted { background:#efefef; color:#666 }
+.cards { display:grid; gap:1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.card { border:1px solid #eee; border-radius:.75rem; padding:1rem; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+.card h3 { margin:0 0 .25rem 0; }
+.muted { color:#666; }
+.links { margin-top:.5rem; font-size:.9rem; }
+@media (min-width: 800px) {
+  .filters { grid-template-columns: 2fr 1fr 1fr auto auto; align-items: center; }
+  .filters details { grid-column: 1 / -1; }
+}
+</style>
